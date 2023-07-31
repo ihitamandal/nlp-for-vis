@@ -108,6 +108,16 @@ def extract_points():
     # print(edges[52:70, 45:60])
     # print(edges[610:635, 1005:1030])
 
+    # detect and remove lines from chart to make point detection more accurate
+    lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
+    print(lines)
+
+    for i in range(len(lines)):
+        pt1 = (lines[i][0][0], lines[i][0][1])
+        pt2 = (lines[i][0][2], lines[i][0][3])
+
+        cv2.line(edges, pt1, pt2, 0, 3)
+
     # split into boxes with side length r (if radius = 4 then each side = 4)
     # identify as point if there are at least 'r/2' number of 255's on each side of the box
     min_radius = 5
@@ -189,6 +199,7 @@ def extract_points():
     for p in points:
         cv2.circle(edges, (p[0], p[1]), p[2], (255, 255, 255), 2)
 
+    # convert into (row, column) format
     points = [[p[1], p[0]] for p in points]
 
     cv2.imshow('edges', edges)
