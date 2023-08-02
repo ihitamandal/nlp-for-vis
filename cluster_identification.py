@@ -42,7 +42,7 @@ def is_black(rgb_val):
     return False
 
 # extract point locations from an image
-def extract_points_test():
+def extract_points_test1():
     img = cv2.imread(args.input[0])
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # cv2.imshow('grayscale chart', img)
@@ -50,8 +50,6 @@ def extract_points_test():
     # cv2.destroyAllWindows()
 
     print(img)
-
-    # points = cv2.HoughCircles(img_gray, cv2.HOUGH_GRADIENT, 1, 1)
 
     # print(points)
     points = []
@@ -69,6 +67,116 @@ def extract_points_test():
     cv2.destroyAllWindows()
     print(points)
 
+def extract_points_test2():
+    img = cv2.imread(args.input[0])
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    edges = cv2.Canny(img_gray, 0, 100)
+    # print("POINT 1: ")
+    # print(edges[42:52, 35:50])
+    # print("POINT 2: ")
+    # print(edges[52:70, 45:60])
+    # print(edges[610:635, 1005:1030])
+
+    # split into boxes with side length r (if radius = 4 then each side = 4)
+    # identify as point if there are at least 'r/2' number of 255's on each side of the box
+    min_radius = 5
+    max_radius = 10
+
+    points = []
+    for i in range(edges.shape[0]):
+        for j in range(edges.shape[1]):
+            for r in range(min_radius, max_radius):
+                if i + r >= edges.shape[0] or j + r >= edges.shape[1]:
+                    continue
+
+                # current i,j is top left corner of the box
+                curr_box = edges[i:i+r, j:j+r]
+                
+                # check for r/2 255's on each side of the box
+                top = curr_box[0, 0:r-1].sum()
+                left = curr_box[0:r-1, 0].sum()
+                bottom = curr_box[r-1, 0:r-1].sum()
+                right = curr_box[0:r-1, r-1].sum()
+
+                threshold = 255*r/2
+
+                if top >= threshold and left >= threshold and bottom >= threshold and right >= threshold:
+                    points.append([i, j, r])
+
+    return points
+
+def extract_points_test3():
+    img = cv2.imread(args.input[0])
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    edges = cv2.Canny(img_gray, 0, 100)
+
+    # split into boxes with side length r (if radius = 4 then each side = 4)
+    # identify as point if there are at least 'r/2' number of 255's on each side of the box
+    min_radius = 5
+    max_radius = 10
+
+    accumulator = np.zeros((edges.shape[0], edges.shape[1], max_radius-min_radius))
+    print(accumulator.shape)
+
+    for i in range(edges.shape[0]):
+        for j in range(edges.shape[1]):
+            for r in range(min_radius, max_radius):
+                for theta in range(0, 360):
+                    a = int(i - r * math.cos(theta))
+                    b = int(j - r * math.sin(theta))
+
+                    if a >= 0 and a < edges.shape[0] and b >= 0 and b < edges.shape[1]:
+                        # print(a, b, r)
+                        accumulator[a][b][r-min_radius] += 1
+
+    print(max(accumulator))
+
+def extract_points_test4():
+    img = cv2.imread(args.input[0])
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    edges = cv2.Canny(img_gray, 0, 100)
+
+    # split into boxes with side length r (if radius = 4 then each side = 4)
+    # identify as point if there are at least 'r/2' number of 255's on each side of the box
+    min_radius = 5
+    max_radius = 10
+
+    points = []
+
+    # circle detection
+    for i in range(edges.shape[0]):
+        for j in range(edges.shape[1]):
+            for r in range(min_radius, max_radius):
+                if i + r >= edges.shape[0] or j + r >= edges.shape[1]:
+                    continue
+
+                # current i,j is top left corner of the box
+                curr_box = edges[i:i+r, j:j+r]
+
+                curr_radius = r//2
+
+                # top left corner of middle box
+                box_radius = curr_radius//2
+                middle = curr_radius
+                middle_box = curr_box[middle-box_radius:middle+box_radius, middle-box_radius:middle+box_radius]
+                if np.sum(middle_box) > 0:
+                    continue
+
+                top = curr_box[0, 0:r-1].sum()
+                left = curr_box[0:r-1, 0].sum()
+                bottom = curr_box[r-1, 0:r-1].sum()
+                right = curr_box[0:r-1, r-1].sum()
+
+                threshold = 255*4
+                if top >= threshold and left >= threshold and bottom >= threshold and right >= threshold:
+                    points.append([i, j, r])
+
+    return points
+
+# manual convolution
 def convolve(img, kernel):
     output = np.zeros(img.shape)
     padded_img = np.zeros((img.shape[0]+2, img.shape[1]+2))
@@ -81,6 +189,7 @@ def convolve(img, kernel):
 
     return output
     
+# Canny edge detection
 def edge_detection():
     img = cv2.imread(args.input[0])
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -123,79 +232,10 @@ def extract_points():
 
     # TODO: detect and remove text (axis labels) from chart
 
-    # split into boxes with side length r (if radius = 4 then each side = 4)
-    # identify as point if there are at least 'r/2' number of 255's on each side of the box
-    min_radius = 5
-    max_radius = 10
-
     points = []
-    # for i in range(edges.shape[0]):
-    #     for j in range(edges.shape[1]):
-    #         for r in range(min_radius, max_radius):
-    #             if i + r >= edges.shape[0] or j + r >= edges.shape[1]:
-    #                 continue
-
-    #             # current i,j is top left corner of the box
-    #             curr_box = edges[i:i+r, j:j+r]
-                
-    #             # check for r/2 255's on each side of the box
-    #             top = curr_box[0, 0:r-1].sum()
-    #             left = curr_box[0:r-1, 0].sum()
-    #             bottom = curr_box[r-1, 0:r-1].sum()
-    #             right = curr_box[0:r-1, r-1].sum()
-
-    #             threshold = 255*r/2
-
-    #             if top >= threshold and left >= threshold and bottom >= threshold and right >= threshold:
-    #                 points.append([i, j, r])
 
     # Using hough circle transform
     points = cv2.HoughCircles(edges, cv2.HOUGH_GRADIENT, 1, minDist=1, param1=100, param2=12, minRadius=3, maxRadius=10)
-    # print(points)
-
-    # accumulator = np.zeros((edges.shape[0], edges.shape[1], max_radius-min_radius))
-    # print(accumulator.shape)
-
-    # for i in range(edges.shape[0]):
-    #     for j in range(edges.shape[1]):
-    #         for r in range(min_radius, max_radius):
-    #             for theta in range(0, 360):
-    #                 a = int(i - r * math.cos(theta))
-    #                 b = int(j - r * math.sin(theta))
-
-    #                 if a >= 0 and a < edges.shape[0] and b >= 0 and b < edges.shape[1]:
-    #                     # print(a, b, r)
-    #                     accumulator[a][b][r-min_radius] += 1
-
-    # print(max(accumulator))
-
-    # circle detection
-    # for i in range(edges.shape[0]):
-    #     for j in range(edges.shape[1]):
-    #         for r in range(min_radius, max_radius):
-    #             if i + r >= edges.shape[0] or j + r >= edges.shape[1]:
-    #                 continue
-
-    #             # current i,j is top left corner of the box
-    #             curr_box = edges[i:i+r, j:j+r]
-
-    #             curr_radius = r//2
-
-    #             # top left corner of middle box
-    #             box_radius = curr_radius//2
-    #             middle = curr_radius
-    #             middle_box = curr_box[middle-box_radius:middle+box_radius, middle-box_radius:middle+box_radius]
-    #             if np.sum(middle_box) > 0:
-    #                 continue
-
-    #             top = curr_box[0, 0:r-1].sum()
-    #             left = curr_box[0:r-1, 0].sum()
-    #             bottom = curr_box[r-1, 0:r-1].sum()
-    #             right = curr_box[0:r-1, r-1].sum()
-
-    #             threshold = 255*4
-    #             if top >= threshold and left >= threshold and bottom >= threshold and right >= threshold:
-    #                 points.append([i, j, r])
 
     # points are in (x, y) coordinates, i.e. (column, row) indices
     points = np.int64(np.around(points[0]))
