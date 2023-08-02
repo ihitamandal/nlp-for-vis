@@ -13,7 +13,6 @@ np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
 parser = argparse.ArgumentParser(description='Process image')
 parser.add_argument('--input', metavar='FILE', type=str, nargs=1, required=True, help='input image')
-parser.add_argument('--model_type', type=str, nargs=1, required=True, help='model type for text extraction')
 
 args = parser.parse_args()
 
@@ -108,7 +107,11 @@ def extract_points():
     # print(edges[52:70, 45:60])
     # print(edges[610:635, 1005:1030])
 
-    # detect and remove lines from chart to make point detection more accurate
+    """
+    filtering to make point detection more accurate
+    """
+
+    # detect and remove lines from chart
     lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
     print(lines)
 
@@ -117,6 +120,8 @@ def extract_points():
         pt2 = (lines[i][0][2], lines[i][0][3])
 
         cv2.line(edges, pt1, pt2, 0, 3)
+
+    # TODO: detect and remove text (axis labels) from chart
 
     # split into boxes with side length r (if radius = 4 then each side = 4)
     # identify as point if there are at least 'r/2' number of 255's on each side of the box
@@ -212,105 +217,6 @@ def extract_points():
 
     return points
 
-# extract the axis labels as text from the chart
-def extract_text():
-    img = cv2.imread(args.input[0])
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    edges = cv2.Canny(img_gray, 0, 100)
-    # print(edges[0:50, 0:50])
-    _, thresholded = cv2.threshold(img_gray, 127, 255, cv2.THRESH_OTSU)
-    enlarged = cv2.resize(thresholded, None, fx=3.0, fy=3.0)
-    _, enlarged = cv2.threshold(enlarged, 127, 255, cv2.THRESH_OTSU)
-
-    # text = pytesseract.image_to_data(img_gray[0:50, 0:40], output_type=Output.DICT)
-    # text = pytesseract.image_to_string(thresholded[50:100, 0:40], config='tessedit_char_whitelist=0123456789')
-    text = pytesseract.image_to_string(enlarged[650:750, 0:100])
-    print(text)
-    print(thresholded[200:250, 0:40])
-    # print(enlarged[650:750, 0:100])
-
-    # cv2.imshow('edges', edges)
-    # cv2.imshow('thresholded', thresholded[50:100, 0:40])
-    cv2.imshow('enlarged', enlarged[650:750, 0:100])
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-def extract_text_cnn(img):
-    train_data = datasets.MNIST(root='data', 
-                                download=True,
-                                train=True, 
-                                transform=transforms.ToTensor())
-    
-    trainloader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
-
-    if args.model_type[0] == 'simple_model':
-        model = torch.nn.Sequential(
-            torch.nn.Linear(2500, 512),
-            torch.nn.ReLU(),
-            torch.nn.Linear(512, 256),
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, 128),
-            torch.nn.ReLU(),
-            torch.nn.Linear(128, 64),
-            torch.nn.ReLU(),
-            torch.nn.Linear(64, 10),
-            torch.nn.LogSoftmax(dim=1)
-        )
-
-    if args.model_type[0] == 'text_extraction':
-        model = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(3,3), padding=1),
-            torch.nn.MaxPool2d(kernel_size=(2,2)),
-            torch.nn.Dropout(),
-            torch.nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(3,3), padding=1),
-            torch.nn.MaxPool2d(kernel_size=(2,2)),
-            torch.nn.Dropout(),
-            torch.nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3,3), padding=1),
-            # torch.nn.MaxPool2d(kernel_size=(2,2)),
-            # torch.nn.Dropout(),
-            # torch.nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3,3), padding=1),
-            torch.nn.Flatten(),
-            torch.nn.Linear(9216, 64),
-            torch.nn.Dropout(),
-            torch.nn.Linear(64, 10),
-            torch.nn.LogSoftmax(dim=1)
-        )
-        print(summary(model, (1, 50, 50), batch_dim=0))
-
-    if os.path.exists(args.model_type[0]):
-        model.load_state_dict(torch.load(args.model_type[0]))
-        return model(img)
-
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    criterion = torch.nn.NLLLoss()
-
-    epochs = 50
-    for e in range(epochs):
-        running_loss = 0
-        for images, labels in trainloader:
-            images = images.view(images.shape[0], -1)
-            # print(images.shape)
-            # want to process 50x50 size image - add zeros to the end
-            zeros = torch.zeros((images.shape[0], 2500-784))
-            # print(images.shape, zeros.shape)
-            images = torch.cat((images, zeros), 1)
-            images = images.view(images.shape[0], 1, 50, 50)
-            # print(images.shape)
-            optimizer.zero_grad()
-            output = model(images)
-            loss = criterion(output, labels)
-            # print("Loss: ", loss.item())
-            loss.backward()
-            optimizer.step()
-            running_loss = loss.item()
-        else:
-          print("Epoch {} - Training loss: {}".format(e, running_loss/len(trainloader)))
-
-
-    torch.save(model.state_dict(), args.model_type[0])
-    return model(img)
-
 def dist(p1, p2):
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
 
@@ -339,32 +245,3 @@ points = extract_points()
 # clusters = find_clusters(points, 20, 3)
 # for cluster in clusters:
 #     print(cluster)
-
-# img = cv2.imread(args.input[0])
-# img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-# _, thresholded = cv2.threshold(img_gray, 127, 255, cv2.THRESH_OTSU)
-# enlarged = cv2.resize(thresholded, None, fx=3.0, fy=3.0)
-# _, enlarged = cv2.threshold(enlarged, 127, 255, cv2.THRESH_OTSU)
-
-# # cv2.imshow('enlarged', enlarged[870:920, 270:320])
-# # cv2.waitKey(0)
-# # cv2.destroyAllWindows()
-# print(enlarged[870:920, 570:620])
-
-# enlarged = enlarged[870:920, 570:620]
-
-# invert = 255*np.ones(enlarged.shape)
-# enlarged = invert - enlarged
-# # print(enlarged)
-
-# # thresholded = thresholded[50:100, 0:50].reshape((1, 1, 50, 50))
-# if args.model_type[0] == 'text_extraction':
-#     enlarged = enlarged.reshape((1, 1, 50, 50))
-
-# if args.model_type[0] == 'simple_model':   
-#     enlarged = enlarged.reshape((1, 2500))
-    
-# log_prob = extract_text_cnn(torch.from_numpy((enlarged.astype(np.float32))))
-# prob = list(torch.exp(log_prob).detach().numpy()[0])
-# prediction = prob.index(max(prob))
-# print("Prediction: ", prediction)
