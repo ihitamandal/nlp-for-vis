@@ -210,6 +210,11 @@ def extract_points():
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     edges = cv2.Canny(img_gray, 0, 100)
+
+    cv2.imshow('edges', edges)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
     # print("POINT 1: ")
     # print(edges[42:52, 35:50])
     # print("POINT 2: ")
@@ -219,8 +224,9 @@ def extract_points():
     """
     Filtering to make point detection more accurate
     1. Detect and remove lines from chart
-    2. TODO: Detect and remove text (axis labels) from chart
+    2. TODO: Detect and remove text (axis labels, title, etc.) from chart
         a. Identify bottom-most line and crop out everything below it
+        b. Identify top-most line and crop out everything above it
         b. Identify left-most line and crop out everything to the left of it (?)
     """
 
@@ -233,6 +239,7 @@ def extract_points():
 
     # contains row index of bottom-most line (highest row index)
     bottom = 0
+    top = 0
 
     for i in range(len(lines)):
         pt1 = (lines[i][0][0], lines[i][0][1])
@@ -246,10 +253,17 @@ def extract_points():
         if pt1[1] > bottom:
             bottom = pt1[1]
 
+        if pt1[1] < top:
+            top = pt1[1]
+
         if pt2[1] > bottom:
             bottom = pt2[1]
 
-    edges = edges[:bottom, :]
+        if pt2[1] < top:
+            top = pt2[1]
+
+    edges = edges[top:bottom]
+
     cv2.imshow('edges', edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -267,17 +281,20 @@ def extract_points():
         cv2.circle(edges, (p[0], p[1]), p[2], (255, 255, 255), 2)
 
     # convert into (row, column) format
-    points = [[p[1], p[0]] for p in points]
+    points = [(p[1], p[0]) for p in points]
+
+    # Filter out duplicate points
+    points = set(points)
 
     cv2.imshow('edges', edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     # print(edges[40:65, 30:50])
-    print(edges[40:55, 435:450])
+    # print(edges[40:55, 435:450])
     # print(edges[:, 290:300])
     print(points)
 
-    return points
+    return list(points)
 
 def dist(p1, p2):
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
