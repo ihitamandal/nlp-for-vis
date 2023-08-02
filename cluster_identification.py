@@ -217,12 +217,22 @@ def extract_points():
     # print(edges[610:635, 1005:1030])
 
     """
-    filtering to make point detection more accurate
+    Filtering to make point detection more accurate
+    1. Detect and remove lines from chart
+    2. TODO: Detect and remove text (axis labels) from chart
+        a. Identify bottom-most line and crop out everything below it
+        b. Identify left-most line and crop out everything to the left of it (?)
     """
 
-    # detect and remove lines from chart
+    # edges = edges[:-30, 30:]
     lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
     print(lines)
+
+    # contains line endpoints to (row, column) instead of (x, y)
+    line_indices = []
+
+    # contains row index of bottom-most line (highest row index)
+    bottom = 0
 
     for i in range(len(lines)):
         pt1 = (lines[i][0][0], lines[i][0][1])
@@ -230,7 +240,19 @@ def extract_points():
 
         cv2.line(edges, pt1, pt2, 0, 3)
 
-    # TODO: detect and remove text (axis labels) from chart
+        line_indices.append([pt1[1], pt1[0]])
+        line_indices.append([pt2[1], pt2[0]])
+
+        if pt1[1] > bottom:
+            bottom = pt1[1]
+
+        if pt2[1] > bottom:
+            bottom = pt2[1]
+
+    edges = edges[:bottom, :]
+    cv2.imshow('edges', edges)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     points = []
 
