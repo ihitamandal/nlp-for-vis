@@ -215,12 +215,6 @@ def extract_points():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    # print("POINT 1: ")
-    # print(edges[42:52, 35:50])
-    # print("POINT 2: ")
-    # print(edges[52:70, 45:60])
-    # print(edges[610:635, 1005:1030])
-
     """
     Filtering to make point detection more accurate
     1. Detect and remove lines from chart
@@ -229,26 +223,17 @@ def extract_points():
         b. Identify top-most line and crop out everything above it
         b. Identify left-most line and crop out everything to the left of it (?)
     """
-
-    # edges = edges[:-30, 30:]
     lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
-    print(lines)
 
-    # contains line endpoints to (row, column) instead of (x, y)
-    line_indices = []
-
-    # contains row index of bottom-most line (highest row index)
+    # Contains row index of bottom-most (highest row index) and topmost (lowest row index) lines
     bottom = 0
-    top = 0
+    top = len(edges)-1
 
     for i in range(len(lines)):
         pt1 = (lines[i][0][0], lines[i][0][1])
         pt2 = (lines[i][0][2], lines[i][0][3])
 
         cv2.line(edges, pt1, pt2, 0, 3)
-
-        line_indices.append([pt1[1], pt1[0]])
-        line_indices.append([pt2[1], pt2[0]])
 
         if pt1[1] > bottom:
             bottom = pt1[1]
@@ -262,25 +247,20 @@ def extract_points():
         if pt2[1] < top:
             top = pt2[1]
 
-    edges = edges[top:bottom]
+    # edges = edges[top:bottom]
+    # cv2.imshow('edges', edges)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
-    cv2.imshow('edges', edges)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    points = []
-
-    # Using hough circle transform
+    # Detect circular points using hough circle transform
+    # Points are in (x, y) coordinate, i.e. (column, row) indices
     points = cv2.HoughCircles(edges, cv2.HOUGH_GRADIENT, 1, minDist=1, param1=100, param2=12, minRadius=3, maxRadius=10)
-
-    # points are in (x, y) coordinates, i.e. (column, row) indices
     points = np.int64(np.around(points[0]))
-    # print(points)
 
     for p in points:
         cv2.circle(edges, (p[0], p[1]), p[2], (255, 255, 255), 2)
 
-    # convert into (row, column) format
+    # Convert into (row, column) format
     points = [(p[1], p[0]) for p in points]
 
     # Filter out duplicate points
@@ -289,9 +269,6 @@ def extract_points():
     cv2.imshow('edges', edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    # print(edges[40:65, 30:50])
-    # print(edges[40:55, 435:450])
-    # print(edges[:, 290:300])
     print(points)
 
     return list(points)
