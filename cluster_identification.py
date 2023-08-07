@@ -9,10 +9,12 @@ from torchvision import datasets, transforms
 from torchsummary import summary
 import pytesseract
 from pytesseract import Output
+# from text_extraction import extract_text_cnn
 np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
 parser = argparse.ArgumentParser(description='Process image')
 parser.add_argument('--input', metavar='FILE', type=str, nargs=1, required=True, help='input image')
+parser.add_argument('--model_type', type=str, nargs=1, required=True, help='model type for text extraction')
 
 args = parser.parse_args()
 
@@ -229,28 +231,32 @@ def extract_points():
     bottom = 0
     top = len(edges)-1
 
+    # Contains column index of leftmost (lowest column index) line
+    left = len(edges[0])-1
+
     for i in range(len(lines)):
         pt1 = (lines[i][0][0], lines[i][0][1])
         pt2 = (lines[i][0][2], lines[i][0][3])
 
         cv2.line(edges, pt1, pt2, 0, 3)
 
-        if pt1[1] > bottom:
+        if pt1[1] > bottom and pt1[1] == pt2[1]:
             bottom = pt1[1]
 
-        if pt1[1] < top:
+        if pt1[1] < top and pt1[1] == pt2[1]:
             top = pt1[1]
 
-        if pt2[1] > bottom:
-            bottom = pt2[1]
+        if pt1[0] < left and pt1[0] == pt2[0]:
+            left = pt1[0]
 
-        if pt2[1] < top:
-            top = pt2[1]
+    cv2.imshow('uncropped', edges)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-    # edges = edges[top:bottom]
-    # cv2.imshow('edges', edges)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    edges = edges[:bottom, left:]
+    cv2.imshow('cropped', edges)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     # Detect circular points using hough circle transform
     # Points are in (x, y) coordinate, i.e. (column, row) indices
@@ -266,7 +272,7 @@ def extract_points():
     # Filter out duplicate points
     points = set(points)
 
-    cv2.imshow('edges', edges)
+    cv2.imshow('points', edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     print(points)
@@ -275,6 +281,35 @@ def extract_points():
 
 def dist(p1, p2):
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+# return line separating y axis from the rest of the chart (leftmost line)
+# lines are result of HoughLinesP (endpoints are in (x,y) coordinates)
+def get_y_axis(img, lines):
+    # Contains column index of leftmost line (lowest column index)
+    left = len(img[0])-1
+
+    for i in range(len(lines)):
+        pt1 = (lines[i][0][0], lines[i][0][1])
+        pt2 = (lines[i][0][2], lines[i][0][3])
+
+        if pt1[0] < left and pt1[0] == pt2[0]:
+            left = pt1[0]
+
+    return left
+
+# return line separating x axis from the rest of the chart (bottom-most line)
+def get_x_axis(img, lines):
+    # Contains row index of bottom-most line (highest row index)
+    bottom = 0
+
+    for i in range(len(lines)):
+        pt1 = (lines[i][0][0], lines[i][0][1])
+        pt2 = (lines[i][0][2], lines[i][0][3])
+
+        if pt1[1] > bottom and pt1[1] == pt2[1]:
+            bottom = pt1[1]
+
+    return bottom
 
 # Identify clusters based on distance between points
 # If distance is under distance_threshold, then points are in the same cluster
@@ -296,8 +331,87 @@ def find_clusters(points, distance_threshold, points_threshold):
 
     return final_clusters
 
+# img: input image
+# cluster: list of points in cluster in (row, column) format (not (x,y) format)
+# left: column index of leftmost line (used to extract y axis labels)
+# bottom: row index of bottom-most line (used to extract x axis labels)
+'''
+1. Identify upper bound and lower bound of y axis label (in terms of row index)
+  a. Identify bounds of cluster
+  b. Run OCR every 50 pixels above and below cluster bounds
+2. Identify upper bound and lower bound of x axis label (in terms of column index)
+'''
+def identify_cluster_location(img, cluster):
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+    edges = cv2.Canny(img_gray, 0, 100)
+
+    lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
+    print(lines)
+    left = get_y_axis(edges, lines)
+    bottom = get_x_axis(edges, lines)
+    print(bottom)
+
+    upper_y_cluster = len(edges) - 1 # upper y bound of cluster (smallest row index in cluster)
+    lower_y_cluster = 0 # lower y bound of cluster (largest row index in cluster)
+
+    lower_x_cluster = len(edges[0]) - 1 # lower x bound of cluster (smallest column index in cluster)
+    upper_x_cluster = 0 # upper x bound of cluster (largest column index in cluster)
+
+    for point in cluster:
+        upper_y_cluster = min(point[0], upper_y_cluster)
+        lower_y_cluster = max(point[0], lower_y_cluster)
+
+        lower_x_cluster = min(point[1], lower_x_cluster)
+        upper_x_cluster = max(point[1], upper_x_cluster)
+
+    y_axis = edges[:, :left+200]
+    x_axis = edges[bottom:, :]
+
+    cv2.imshow('y axis', y_axis)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    cv2.imshow('x axis', x_axis)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    '''
+    Extract y coordinates of cluster bounds:
+    1 Get line right above highest bound, extract axis label from that line
+        - largest row index that is lower than upper_y_cluster
+    2. Get row index of line right below lowest bound, extract axis label from that line
+        - smallest row index that is higher than lower_y_cluster
+    '''
+    upper_bound = 0
+    lower_bound = len(edges)-1
+    for i in range(len(lines)):
+        pt1 = (lines[i][0][0], lines[i][0][1])
+        pt2 = (lines[i][0][2], lines[i][0][3])
+
+        if pt1[1] <= upper_y_cluster and pt1[1] == pt2[1] and pt1[1] > upper_bound:
+            upper_bound = pt1[1]
+
+        if pt1[1] >= lower_y_cluster and pt1[1] == pt2[1] and pt1[1] < lower_bound:
+            lower_bound = pt1[1]
+
+    print(upper_bound, lower_bound)
+    upper_y_axis = edges[upper_bound-25:upper_bound+25, left-50:left]
+    lower_y_axis = edges[lower_bound-25:lower_bound+25, left-50:left]
+
+    upper_y_text = pytesseract.image_to_string(upper_y_axis)
+    lower_y_text = pytesseract.image_to_string(lower_y_axis)
+    print(upper_y_text, lower_y_text)
+
+    cv2.imshow('upper bound', edges[upper_bound-25:upper_bound+25, left-50:left])
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+img = cv2.imread(args.input[0])
 points = extract_points()
-# clusters = find_clusters(points, 20, 3)
-# for cluster in clusters:
-#     print(cluster)
+# TODO: Replace with sklearn clustering code
+cluster = [(138, 40), (140, 40), (72, 48), (110, 96), (156, 72), (108, 96), (110, 16), (160, 72), (108, 16), (72, 50), (156, 74), (138, 38), (108, 98), (140, 38), (158, 74)]
+# cluster = [(618, 958), (602, 980), (604, 980), (618, 912), (632, 1002), (582, 946), (634, 1002), (602, 982), (566, 992), (604, 982), (584, 946), (632, 1004), (634, 1004), (602, 978), (620, 910), (600, 980), (582, 944), (684, 830), (622, 910)]
+identify_cluster_location(img, cluster)
+

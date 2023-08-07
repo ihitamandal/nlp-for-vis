@@ -41,6 +41,9 @@ def extract_text():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+# img: 50x50 image containing text to recognize
+# if cnn model, reshape image to (1, 1, 50, 50)
+# if simple model, reshape image to (1, 2500)
 def extract_text_cnn(img):
     train_data = datasets.MNIST(root='data', 
                                 download=True,
