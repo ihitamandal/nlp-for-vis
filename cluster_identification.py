@@ -9,7 +9,7 @@ from torchvision import datasets, transforms
 from torchsummary import summary
 import pytesseract
 from pytesseract import Output
-# from text_extraction import extract_text_cnn
+from text_extraction import extract_text_cnn
 np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
 parser = argparse.ArgumentParser(description='Process image')
@@ -211,7 +211,7 @@ def extract_points():
     img = cv2.imread(args.input[0])
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    edges = cv2.Canny(img_gray, 0, 100)
+    edges = cv2.Canny(img_gray, 200, 200)
 
     cv2.imshow('edges', edges)
     cv2.waitKey(0)
@@ -223,7 +223,7 @@ def extract_points():
     2. TODO: Detect and remove text (axis labels, title, etc.) from chart
         a. Identify bottom-most line and crop out everything below it
         b. Identify top-most line and crop out everything above it
-        b. Identify left-most line and crop out everything to the left of it (?)
+        c. Identify left-most line and crop out everything to the left of it
     """
     lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
 
@@ -344,13 +344,30 @@ def find_clusters(points, distance_threshold, points_threshold):
 def identify_cluster_location(img, cluster):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    edges = cv2.Canny(img_gray, 0, 100)
+    edges = cv2.Canny(img_gray, 200, 200)
 
+    # axes = cv2.Canny(img_gray, 500, 500)
+    # axes_lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=5, minLineLength=10)
+    # cv2.imshow('axes', axes)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    # for i in range(len(axes_lines)):
+    #     pt1 = (axes_lines[i][0][0], axes_lines[i][0][1])
+    #     pt2 = (axes_lines[i][0][2], axes_lines[i][0][3])
+
+    #     cv2.line(axes, pt1, pt2, 0, 3)
+
+    # cv2.imshow('without axes', axes)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    # lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
     lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
-    print(lines)
+    # print(lines)
     left = get_y_axis(edges, lines)
     bottom = get_x_axis(edges, lines)
-    print(bottom)
+    print(left, bottom)
 
     upper_y_cluster = len(edges) - 1 # upper y bound of cluster (smallest row index in cluster)
     lower_y_cluster = 0 # lower y bound of cluster (largest row index in cluster)
@@ -364,8 +381,15 @@ def identify_cluster_location(img, cluster):
 
         lower_x_cluster = min(point[1], lower_x_cluster)
         upper_x_cluster = max(point[1], upper_x_cluster)
+    
+    print("y cluster bounds: ", upper_y_cluster, lower_y_cluster)
+    print("x cluster bounds: ", lower_x_cluster, upper_x_cluster)
 
-    y_axis = edges[:, :left+200]
+    cv2.imshow('cluster', edges[upper_y_cluster:lower_y_cluster, left+lower_x_cluster:left+upper_x_cluster])
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    y_axis = edges[:, :left]
     x_axis = edges[bottom:, :]
 
     cv2.imshow('y axis', y_axis)
@@ -396,14 +420,78 @@ def identify_cluster_location(img, cluster):
             lower_bound = pt1[1]
 
     print(upper_bound, lower_bound)
-    upper_y_axis = edges[upper_bound-25:upper_bound+25, left-50:left]
-    lower_y_axis = edges[lower_bound-25:lower_bound+25, left-50:left]
+    upper_y_axis = img_gray[upper_bound-25:upper_bound+25, left-50:left]
+    lower_y_axis = img_gray[lower_bound-25:lower_bound+25, left-50:left]
 
-    upper_y_text = pytesseract.image_to_string(upper_y_axis)
-    lower_y_text = pytesseract.image_to_string(lower_y_axis)
-    print(upper_y_text, lower_y_text)
+    # _, upper_y_axis = cv2.threshold(upper_y_axis, 127, 255, cv2.THRESH_BINARY_INV)
 
-    cv2.imshow('upper bound', edges[upper_bound-25:upper_bound+25, left-50:left])
+    # if args.model_type[0] == 'cnn':
+    #     upper_y_axis = upper_y_axis.reshape((1, 1, 50, 50))
+
+    # if args.model_type[0] == 'simple_model':   
+    #     upper_y_axis = upper_y_axis.reshape((1, 2500))
+
+    # log_prob = extract_text_cnn(torch.from_numpy((upper_y_axis.astype(np.float32))))
+    # prob = list(torch.exp(log_prob).detach().numpy()[0])
+    # upper_y_text = prob.index(max(prob))
+
+    upper_y_text = pytesseract.image_to_string(upper_y_axis, config='--psm 7 -c tessedit_char_whitelist=0123456789')
+    lower_y_text = pytesseract.image_to_string(lower_y_axis, config='--psm 7 -c tessedit_char_whitelist=0123456789')
+    print('upper y: ', upper_y_text)
+    print('lower y: ', lower_y_text)
+
+    print(upper_y_axis)
+    cv2.imshow('upper y axis', upper_y_axis)
+    cv2.imshow('lower y axis', lower_y_axis)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    '''
+    Extract x coordinates of cluster bounds:
+    1 Get line to the right of highest bound, extract axis label from that line
+        - smallest column index that is higher than upper_x_cluster
+    2. Get column index of line to the left of lowest bound, extract axis label from that line
+        - largest column index that is lower than lower_x_cluster
+    '''
+    left_bound = 0
+    right_bound = len(edges[0])-1
+
+    for i in range(len(lines)):
+        pt1 = (lines[i][0][0], lines[i][0][1])
+        pt2 = (lines[i][0][2], lines[i][0][3])
+
+        if pt1[0] <= lower_x_cluster and pt1[0] == pt2[0] and pt1[0] > left_bound:
+            left_bound = pt1[0]
+
+        if pt1[0] >= upper_x_cluster and pt1[0] == pt2[0] and pt1[0] < right_bound:
+            right_bound = pt1[0]
+
+    lower_x_axis = img_gray[bottom+10:bottom+60, left_bound-25:left_bound+25]
+    # x = cv2.threshold(cv2.medianBlur(img, 3), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    upper_x_axis = img_gray[bottom+10:bottom+60, right_bound-25:right_bound+25]
+    # print(left_bound, right_bound)
+
+    lower_x_text = pytesseract.image_to_string(lower_x_axis, config='--psm 7 -c tessedit_char_whitelist=0123456789')
+    upper_x_text = pytesseract.image_to_string(upper_x_axis, config='--psm 7 -c tessedit_char_whitelist=0123456789')
+    print('lower x text: ', lower_x_text)
+    print('upper x text: ', upper_x_text)
+    print(upper_x_axis)
+    
+    # _, lower_x_axis = cv2.threshold(lower_x_axis, 127, 255, cv2.THRESH_BINARY_INV)
+
+    # if args.model_type[0] == 'cnn':
+    #     lower_x_axis = lower_x_axis.reshape((1, 1, 50, 50))
+
+    # if args.model_type[0] == 'simple_model':   
+    #     lower_x_axis = lower_x_axis.reshape((1, 2500))
+
+    # log_prob = extract_text_cnn(torch.from_numpy((lower_x_axis.astype(np.float32))))
+    # prob = list(torch.exp(log_prob).detach().numpy()[0])
+    # lower_x_text = prob.index(max(prob))
+    # print(lower_x_text)
+
+    cv2.imshow('upper x axis', upper_x_axis)
+    cv2.imshow('lower x axis', lower_x_axis)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -411,7 +499,7 @@ def identify_cluster_location(img, cluster):
 img = cv2.imread(args.input[0])
 points = extract_points()
 # TODO: Replace with sklearn clustering code
-cluster = [(138, 40), (140, 40), (72, 48), (110, 96), (156, 72), (108, 96), (110, 16), (160, 72), (108, 16), (72, 50), (156, 74), (138, 38), (108, 98), (140, 38), (158, 74)]
-# cluster = [(618, 958), (602, 980), (604, 980), (618, 912), (632, 1002), (582, 946), (634, 1002), (602, 982), (566, 992), (604, 982), (584, 946), (632, 1004), (634, 1004), (602, 978), (620, 910), (600, 980), (582, 944), (684, 830), (622, 910)]
+# cluster = [(138, 40), (140, 40), (72, 48), (110, 96), (156, 72), (108, 96), (110, 16), (160, 72), (108, 16), (72, 50), (156, 74), (138, 38), (108, 98), (140, 38), (158, 74)]
+cluster = [(618, 958), (602, 980), (604, 980), (618, 912), (632, 1002), (634, 1002), (602, 982), (566, 992), (604, 982), (584, 946), (632, 1004), (634, 1004), (602, 978), (620, 910), (600, 980), (582, 944), (622, 910)]
 identify_cluster_location(img, cluster)
 

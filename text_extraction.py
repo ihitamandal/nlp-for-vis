@@ -119,6 +119,7 @@ def extract_text_cnn(img):
     torch.save(model.state_dict(), args.model_type[0])
     return model(img)
 
+'''
 img = cv2.imread(args.input[0])
 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 _, thresholded = cv2.threshold(img_gray, 127, 255, cv2.THRESH_OTSU)
@@ -147,3 +148,4 @@ log_prob = extract_text_cnn(torch.from_numpy((enlarged.astype(np.float32))))
 prob = list(torch.exp(log_prob).detach().numpy()[0])
 prediction = prob.index(max(prob))
 print("Prediction: ", prediction)
+'''
