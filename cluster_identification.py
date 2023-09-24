@@ -346,23 +346,22 @@ def identify_cluster_location(img, cluster):
 
     edges = cv2.Canny(img_gray, 200, 200)
 
-    # axes = cv2.Canny(img_gray, 500, 500)
-    # axes_lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=5, minLineLength=10)
-    # cv2.imshow('axes', axes)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    axes = cv2.Canny(img_gray, 500, 500)
+    axes_lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=5, minLineLength=10)
+    cv2.imshow('axes', axes)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-    # for i in range(len(axes_lines)):
-    #     pt1 = (axes_lines[i][0][0], axes_lines[i][0][1])
-    #     pt2 = (axes_lines[i][0][2], axes_lines[i][0][3])
+    for i in range(len(axes_lines)):
+        pt1 = (axes_lines[i][0][0], axes_lines[i][0][1])
+        pt2 = (axes_lines[i][0][2], axes_lines[i][0][3])
 
-    #     cv2.line(axes, pt1, pt2, 0, 3)
+        cv2.line(axes, pt1, pt2, 0, 3)
 
-    # cv2.imshow('without axes', axes)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    cv2.imshow('without axes', axes)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-    # lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
     lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=10, minLineLength=10)
     # print(lines)
     left = get_y_axis(edges, lines)
@@ -494,6 +493,41 @@ def identify_cluster_location(img, cluster):
     cv2.imshow('lower x axis', lower_x_axis)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+    lower_x = int(lower_x_text)
+    upper_x = int(upper_x_text)
+    lower_y = int(lower_y_text)
+    upper_y = int(upper_y_text)
+
+    x_bounds = (lower_x_cluster, upper_x_cluster)
+    x_labels = (lower_x, upper_x)
+    x_axis_locations = (left_bound, right_bound)
+
+    x1, x2 = find_coordinates(x_bounds, x_labels, x_axis_locations)
+    print("x cluster bounds: ", x1, x2)
+
+    y_bounds = (upper_y_cluster, lower_y_cluster)
+    y_labels = (upper_y, lower_y)
+    y_axis_locations = (upper_bound, lower_bound)
+    
+    y1, y2 = find_coordinates(y_bounds, y_labels, y_axis_locations)
+    print("y cluster bounds: ", y2, y1)
+
+def find_coordinates(cluster_bounds, axis_labels, axis_locations):
+    x1 = cluster_bounds[0]
+    x2 = cluster_bounds[1]
+
+    d1 = axis_labels[0]
+    d2 = axis_labels[1]
+
+    r1 = axis_locations[0]
+    r2 = axis_locations[1]
+
+    ratio = (d2 - d1)/(r2 - r1)
+    y1 = (x1-r1)*ratio + d1
+    y2 = (x2-r1)*ratio + d1
+
+    return y1, y2
 
 
 img = cv2.imread(args.input[0])
