@@ -499,7 +499,7 @@ def identify_cluster_location(img, cluster):
     lower_y = int(lower_y_text)
     upper_y = int(upper_y_text)
 
-    x_bounds = (lower_x_cluster, upper_x_cluster)
+    x_bounds = (left+lower_x_cluster, left+upper_x_cluster)
     x_labels = (lower_x, upper_x)
     x_axis_locations = (left_bound, right_bound)
 
